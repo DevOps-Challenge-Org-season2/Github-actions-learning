@@ -1,0 +1,52 @@
+name: Build, Deploy and Notify
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: Build Docker image
+      run: docker build -t manjukavya/learning-day-6:latest .
+
+    - name: Push Docker image
+      run: docker push manjukavya/learning-day-6:latest
+
+    - name: Run container
+      run: docker run -d -p 8080:80 --name app manjukavya/learning-day-6:latest
+
+    - name: Wait for container to start
+      run: sleep 10
+
+    - name: Validate application
+      id: validate
+      run: |
+        if curl -s http://localhost:8080 | grep -q "expected-content"; then
+          echo "status=success" >> $GITHUB_OUTPUT
+        else
+          echo "status=failure" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Send email notification
+      if: always()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: ${{ secrets.SMTP_SERVER }}
+        server_port: ${{ secrets.SMTP_PORT }}
+        username: ${{ secrets.EMAIL_FROM }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: Deployment Status
+        to: ${{ secrets.EMAIL_TO }}
+        from: ${{ secrets.EMAIL_FROM }}
+        body: |
+          Deployment Status: ${{ steps.validate.outputs.status }}
+          Docker Image: manjukavya/learning-day-6:latest
+
